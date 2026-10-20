@@ -62,3 +62,5 @@ targets:
       - sdk: SystemConfiguration.framework
       - sdk: Security.framework
       - sdk: libresolv.tbd
+      - sdk: UIKit.framework
+      - sdk: UserNotifications.framework
