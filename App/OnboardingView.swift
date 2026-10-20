@@ -72,12 +72,12 @@ struct OnboardingView: View {
         switch step {
         case .mode:
             VStack(spacing: 0) {
-                Spacer().frame(height: 40)
-                Image("Logo").resizable().scaledToFit().padding(.horizontal, 16)
-                Text("ВЫБЕРИТЕ, КАК ПОДКЛЮЧИТЬСЯ")
-                    .font(mono(14)).tracking(1).foregroundColor(.w1Muted)
+                Spacer().frame(height: 36)
+                BrandHeader()
+                Text("Выберите, как подключиться")
+                    .font(ui(16)).foregroundColor(.w1Muted)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 18)
+                    .padding(.top, 10)
                 VStack(spacing: 12) {
                     ChoiceCard(icon: "shield.fill", title: "VPN", subtitle: "Защищённое подключение по ключу доступа") {
                         mode = .vpn
@@ -98,10 +98,10 @@ struct OnboardingView: View {
             }
 
         case .key:
-            StepHeader(title: "Ключ доступа", subtitle: "Вставьте ключ, который вы получили от администратора. Он выглядит так: ABCD-EFGH")
+            StepHeader(title: "Ключ доступа", subtitle: "Вставьте ключ из бота @WindyCfg_bot. Он выглядит так: ABCD-EFGH")
             HStack {
                 TextField("", text: $key, prompt: Text("XXXX-XXXX").foregroundColor(.w1Dim))
-                    .font(mono(22, .semibold))
+                    .font(ui(22, .semibold))
                     .foregroundColor(.white)
                     .textInputAutocapitalization(.characters)
                     .disableAutocorrection(true)
@@ -115,17 +115,18 @@ struct OnboardingView: View {
                         key = String(text.trimmingCharacters(in: .whitespacesAndNewlines).uppercased().prefix(16))
                     }
                 }
-                .font(mono(14, .semibold))
-                .foregroundColor(.w1BlueLight)
+                .font(ui(14, .semibold))
+                .foregroundColor(.white)
             }
             .padding(.horizontal, 16)
             .frame(height: 60)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.w1Glass))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.w1Border, lineWidth: 1))
+            .card(18)
             .padding(.top, 24)
             errorText
             PrimaryButton(title: "Продолжить", busy: busy, enabled: key.filter { $0.isLetter || $0.isNumber }.count >= 8) { next() }
                 .padding(.top, 20)
+            PillButton(icon: "cart", title: "Купить ключ") { openURL(W1.shopURL) }
+                .padding(.top, 12)
 
         case .dns:
             StepHeader(title: "DNS-сервер", subtitle: "DNS-запросы телефона пойдут через выбранный сервер, остальной трафик — напрямую.")
@@ -136,20 +137,18 @@ struct OnboardingView: View {
                 dnsRow("Свой адрес", "", selected: dnsChoice == "custom") { dnsChoice = "custom" }
             }
             .padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 20).fill(Color.w1Glass))
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.w1Border, lineWidth: 1))
+            .card(24)
             .padding(.top, 20)
             if dnsChoice == "custom" {
                 TextField("", text: $customDns, prompt: Text("например 9.9.9.9").foregroundColor(.w1Dim))
-                    .font(mono(18))
+                    .font(ui(18))
                     .foregroundColor(.white)
                     .keyboardType(.numbersAndPunctuation)
                     .disableAutocorrection(true)
                     .textInputAutocapitalization(.never)
                     .padding(.horizontal, 16)
                     .frame(height: 56)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color.w1Glass))
-                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.w1Border, lineWidth: 1))
+                    .card(18)
                     .padding(.top, 12)
             }
             errorText
@@ -162,15 +161,13 @@ struct OnboardingView: View {
                     .font(.system(size: 32))
                     .foregroundColor(.white)
                     .frame(width: 76, height: 76)
-                    .background(RoundedRectangle(cornerRadius: 22).fill(Color.w1Glass))
-                    .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(Color.w1Blue, lineWidth: 1.5))
-                    .shadow(color: Color.w1Blue.opacity(0.5), radius: 10)
+                    .card(22)
                     .padding(.top, 16)
                 Text("Последний шаг")
-                    .font(mono(24, .heavy)).foregroundColor(.white)
+                    .font(ui(24, .heavy)).foregroundColor(.white)
                     .padding(.top, 20)
                 Text("Откройте бота LitEnergy VPN и нажмите «Старт». После этого приложение запустится автоматически.")
-                    .font(mono(14)).foregroundColor(.w1Muted)
+                    .font(ui(14)).foregroundColor(.w1Muted)
                     .multilineTextAlignment(.center)
                     .padding(.top, 10)
                 PrimaryButton(title: "Открыть бота", busy: busy && !botOpened) {
@@ -190,7 +187,7 @@ struct OnboardingView: View {
                 if botOpened {
                     HStack(spacing: 10) {
                         ProgressView().tint(.w1Muted)
-                        Text("Ждём нажатия «Старт»…").font(mono(14)).foregroundColor(.w1Muted)
+                        Text("Ждём нажатия «Старт»…").font(ui(14)).foregroundColor(.w1Muted)
                     }
                     .padding(.top, 20)
                 }
@@ -203,7 +200,7 @@ struct OnboardingView: View {
     private var errorText: some View {
         if let error {
             Text(error)
-                .font(mono(14))
+                .font(ui(14))
                 .foregroundColor(.w1Red)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
@@ -215,11 +212,11 @@ struct OnboardingView: View {
             HStack(spacing: 14) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 20))
-                    .foregroundColor(selected ? .w1BlueLight : .w1Dim)
-                Text(title).font(mono(16)).foregroundColor(.white)
+                    .foregroundColor(selected ? .white : .w1Dim)
+                Text(title).font(ui(16)).foregroundColor(.white)
                 Spacer()
                 if !address.isEmpty {
-                    Text(address).font(mono(15)).foregroundColor(.w1Muted)
+                    Text(address).font(ui(15)).foregroundColor(.w1Muted)
                 }
             }
             .padding(.horizontal, 16)

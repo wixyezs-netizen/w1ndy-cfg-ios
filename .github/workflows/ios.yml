@@ -167,6 +167,15 @@ jobs:
           xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg dns 8.8.8.8
           xcrun simctl launch "$UDID" com.w1ndy.cfg; sleep 10
           xcrun simctl io "$UDID" screenshot shots/2-home.png
+          xcrun simctl terminate "$UDID" com.w1ndy.cfg || true
+          EXP=$(( $(date +%s) + 28*86400 ))
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg mode vpn
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg expires_at -float "$EXP"
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg plan "Германия"
+          xcrun simctl launch "$UDID" com.w1ndy.cfg; sleep 6
+          xcrun simctl io "$UDID" screenshot shots/3-home-vpn.png
+          xcrun simctl launch "$UDID" com.w1ndy.cfg; sleep 1
+          xcrun simctl io "$UDID" screenshot shots/4-dots.png
           ls -la shots
 
       - name: Upload screenshots

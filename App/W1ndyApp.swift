@@ -38,41 +38,72 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(SpaceBackground())
+        .background(AppBackground())
     }
 }
 
-/// Звёздный фон на весь экран (не влияет на размеры содержимого).
-struct SpaceBackground: View {
+/// Чёрный фон и падающие белые точки в верхней четверти экрана.
+struct AppBackground: View {
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black
+            FallingDots()
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+}
+
+struct FallingDots: View {
+    var count = 46
+    var zone: CGFloat = 0.25 // доля высоты экрана
+
     var body: some View {
         GeometryReader { geo in
-            Image("Space")
-                .resizable()
-                .scaledToFill()
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipped()
+            let height = geo.size.height * zone
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                Canvas { ctx, size in
+                    for i in 0 ..< count {
+                        let seed = Double(i)
+                        let x = fract(sin(seed * 12.9898) * 43758.5453) * size.width
+                        let speed = 14 + fract(sin(seed * 78.233) * 12345.678) * 30 // pt/s
+                        let phase = fract(sin(seed * 3.17) * 9876.54)
+                        let r = 0.7 + fract(sin(seed * 5.71) * 4567.89) * 1.3
+                        let progress = fract(t * speed / Double(height) + phase)
+                        let y = progress * Double(height)
+                        let alpha = (1 - progress) * (0.35 + 0.55 * fract(sin(seed * 9.1) * 777.7))
+                        let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
+                        ctx.fill(Path(ellipseIn: rect), with: .color(.white.opacity(alpha)))
+                    }
+                }
+                .frame(height: height)
+            }
         }
-        .background(Color.black)
-        .ignoresSafeArea()
+    }
+
+    private func fract(_ v: Double) -> Double {
+        v - floor(v)
     }
 }
 
-// MARK: - Палитра «космос»
+// MARK: - Палитра (как в мини-приложении)
 
 extension Color {
-    static let w1Blue = Color(red: 0.184, green: 0.525, blue: 1.0)
-    static let w1BlueLight = Color(red: 0.31, green: 0.64, blue: 1.0)
-    static let w1Chrome = Color(red: 0.86, green: 0.90, blue: 0.95)
-    static let w1Muted = Color(red: 0.71, green: 0.75, blue: 0.83)
-    static let w1Dim = Color(red: 0.43, green: 0.48, blue: 0.57)
-    static let w1Red = Color(red: 1.0, green: 0.36, blue: 0.36)
-    static let w1Glass = Color(red: 0.024, green: 0.04, blue: 0.08).opacity(0.75)
-    static let w1Sheet = Color(red: 0.04, green: 0.067, blue: 0.125)
-    static let w1Border = Color(red: 0.24, green: 0.545, blue: 1.0).opacity(0.38)
+    static let w1Surface = Color(red: 0.086, green: 0.086, blue: 0.086) // #161616
+    static let w1Raised = Color(red: 0.11, green: 0.11, blue: 0.118) // #1c1c1e
+    static let w1Pill = Color(red: 0.133, green: 0.133, blue: 0.133) // #222222
+    static let w1Border = Color.white.opacity(0.08)
+    static let w1BorderStrong = Color.white.opacity(0.18)
+    static let w1Muted = Color(red: 0.557, green: 0.557, blue: 0.576) // #8e8e93
+    static let w1Dim = Color(red: 0.388, green: 0.388, blue: 0.4) // #636366
+    static let w1Red = Color(red: 0.937, green: 0.267, blue: 0.267) // #ef4444
+    static let w1Green = Color(red: 0.204, green: 0.78, blue: 0.349) // #34c759
+    static let w1Sheet = Color(red: 0.055, green: 0.055, blue: 0.055)
 }
 
-func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-    .system(size: size, weight: weight, design: .monospaced)
+func ui(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+    .system(size: size, weight: weight, design: .default)
 }
 
 extension View {
@@ -83,5 +114,10 @@ extension View {
         } else {
             self
         }
+    }
+
+    func card(_ radius: CGFloat = 24) -> some View {
+        background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Color.w1Surface))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Color.w1Border, lineWidth: 1))
     }
 }

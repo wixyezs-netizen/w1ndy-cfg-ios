@@ -1,7 +1,25 @@
 import NetworkExtension
 import SwiftUI
 
-/// Большая круглая кнопка с хромированным кольцом и синим свечением.
+/// Плитка с символом и название — как шапка мини-приложения.
+struct BrandHeader: View {
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: compact ? 12 : 18) {
+            Image(systemName: "wind")
+                .font(.system(size: compact ? 30 : 36, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: compact ? 64 : 76, height: compact ? 64 : 76)
+                .card(compact ? 18 : 22)
+            Text("W1NDY CFG")
+                .font(ui(compact ? 26 : 30, .heavy))
+                .foregroundColor(.white)
+        }
+    }
+}
+
+/// Большая круглая кнопка в монохромном стиле.
 struct ConnectButton: View {
     let status: NEVPNStatus
     let action: () -> Void
@@ -12,99 +30,70 @@ struct ConnectButton: View {
 
     private var label: String {
         switch status {
-        case .connected: return "ОТКЛЮЧИТЬ"
-        case .connecting, .reasserting: return "ПОДКЛЮЧЕНИЕ"
-        case .disconnecting: return "ОТКЛЮЧЕНИЕ"
-        default: return "АКТИВИРОВАТЬ"
+        case .connected: return "Отключить"
+        case .connecting, .reasserting: return "Подключение…"
+        case .disconnecting: return "Отключение…"
+        default: return "Подключить"
         }
-    }
-
-    private var glow: Double {
-        if on { return pulse ? 1.0 : 0.65 }
-        if busy { return pulse ? 0.85 : 0.25 }
-        return 0.35
-    }
-
-    private var ringColors: [Color] {
-        on
-            ? [.w1BlueLight, Color(red: 0.62, green: 0.82, blue: 1.0), .w1Blue, Color(red: 0.62, green: 0.82, blue: 1.0), .w1BlueLight]
-            : [.white, Color(red: 0.56, green: 0.66, blue: 0.79), Color(red: 0.37, green: 0.66, blue: 1.0), .white, Color(red: 0.56, green: 0.66, blue: 0.79), .white]
     }
 
     var body: some View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(RadialGradient(
-                        colors: [Color.w1Blue.opacity(0.55 * glow), Color.w1Blue.opacity(0.12 * glow), .clear],
-                        center: .center, startRadius: 70, endRadius: 132
-                    ))
-                    .frame(width: 264, height: 264)
+                    .fill(Color.white.opacity(on ? (pulse ? 0.16 : 0.08) : (busy ? (pulse ? 0.1 : 0.03) : 0)))
+                    .frame(width: 236, height: 236)
+                    .blur(radius: 18)
                 Circle()
-                    .fill(RadialGradient(
-                        colors: [Color(red: 0.043, green: 0.078, blue: 0.141), Color(red: 0.008, green: 0.012, blue: 0.03)],
-                        center: .center, startRadius: 0, endRadius: 107
-                    ))
-                    .frame(width: 214, height: 214)
-                    .overlay(
-                        Circle().strokeBorder(AngularGradient(gradient: Gradient(colors: ringColors), center: .center), lineWidth: on ? 3 : 2.5)
-                    )
-                    .shadow(color: Color.w1Blue.opacity(on ? 0.9 : 0.45), radius: on ? 18 : 10)
+                    .fill(on ? Color.white : Color.w1Surface)
+                    .overlay(Circle().strokeBorder(on ? Color.white : Color.w1BorderStrong, lineWidth: 1))
+                    .frame(width: 196, height: 196)
+                    .shadow(color: .white.opacity(on ? 0.25 : 0), radius: 22)
                 VStack(spacing: 12) {
                     Image(systemName: "power")
-                        .font(.system(size: 70, weight: .light))
-                        .foregroundStyle(on
-                            ? AnyShapeStyle(Color.w1BlueLight)
-                            : AnyShapeStyle(LinearGradient(colors: [.white, Color(red: 0.6, green: 0.68, blue: 0.79)], startPoint: .top, endPoint: .bottom)))
+                        .font(.system(size: 58, weight: .regular))
                     Text(label)
-                        .font(mono(16, .medium))
-                        .tracking(1)
-                        .foregroundColor(on ? .w1BlueLight : .white)
+                        .font(ui(17, .semibold))
                 }
+                .foregroundColor(on ? .black : .white)
             }
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .disabled(status == .disconnecting)
+        .animation(.easeInOut(duration: 0.25), value: on)
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) { pulse = true }
+            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { pulse = true }
         }
     }
 }
 
-/// Стеклянная плашка с синей светящейся рамкой.
-struct GlowPill: View {
+/// Карточка-ссылка внизу экрана.
+struct LinkCard: View {
     let icon: String
     let title: String
-    let handle: String
+    let subtitle: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 16) {
+            HStack(spacing: 14) {
                 Image(systemName: icon)
-                    .font(.system(size: 21, weight: .regular))
-                    .foregroundColor(.w1Chrome)
-                    .frame(width: 28)
-                (Text(handle.isEmpty ? title : title + " ").foregroundColor(.white) + Text(handle).foregroundColor(.w1BlueLight))
-                    .font(mono(15))
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.w1Pill))
+                    .overlay(Circle().strokeBorder(Color.w1Border, lineWidth: 1))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(ui(16, .semibold)).foregroundColor(.white)
+                    Text(subtitle).font(ui(14)).foregroundColor(.w1Muted)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundColor(.w1Dim)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 18)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(LinearGradient(
-                        colors: [Color(red: 0.043, green: 0.106, blue: 0.212).opacity(0.85), Color(red: 0.016, green: 0.04, blue: 0.086).opacity(0.85)],
-                        startPoint: .top, endPoint: .bottom
-                    ))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(LinearGradient(colors: [.w1Blue, Color(red: 0.55, green: 0.76, blue: 1.0), .w1Blue], startPoint: .leading, endPoint: .trailing), lineWidth: 1.5)
-            )
-            .shadow(color: Color.w1Blue.opacity(0.45), radius: 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .card(22)
         }
         .buttonStyle(.plain)
     }
@@ -120,25 +109,26 @@ struct ChoiceCard: View {
         Button(action: action) {
             HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.system(size: 22))
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.white)
-                    .frame(width: 48, height: 48)
-                    .background(RoundedRectangle(cornerRadius: 14).fill(Color(red: 0.08, green: 0.13, blue: 0.23)))
+                    .frame(width: 46, height: 46)
+                    .background(Circle().fill(Color.w1Pill))
+                    .overlay(Circle().strokeBorder(Color.w1Border, lineWidth: 1))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(mono(18, .bold)).foregroundColor(.white)
-                    Text(subtitle).font(mono(13)).foregroundColor(.w1Muted).multilineTextAlignment(.leading)
+                    Text(title).font(ui(18, .bold)).foregroundColor(.white)
+                    Text(subtitle).font(ui(14)).foregroundColor(.w1Muted).multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").foregroundColor(.w1Dim)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundColor(.w1Dim)
             }
             .padding(18)
-            .background(RoundedRectangle(cornerRadius: 20).fill(Color.w1Glass))
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(Color.w1Border, lineWidth: 1))
+            .card(24)
         }
         .buttonStyle(.plain)
     }
 }
 
+/// Белая кнопка (главное действие), как «Установить и настроить» в мини-приложении.
 struct PrimaryButton: View {
     let title: String
     var busy = false
@@ -149,18 +139,59 @@ struct PrimaryButton: View {
         Button(action: action) {
             ZStack {
                 if busy {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(.black)
                 } else {
-                    Text(title).font(mono(16, .bold))
+                    Text(title).font(ui(17, .bold))
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 56)
-            .foregroundColor(enabled ? .white : .w1Dim)
-            .background(RoundedRectangle(cornerRadius: 16).fill(enabled ? Color.w1Blue : Color(red: 0.08, green: 0.13, blue: 0.23)))
-            .shadow(color: Color.w1Blue.opacity(enabled ? 0.45 : 0), radius: 10)
+            .foregroundColor(enabled ? .black : .w1Dim)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(enabled ? Color.white : Color.w1Surface))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(enabled ? Color.clear : Color.w1Border, lineWidth: 1))
+            .shadow(color: .white.opacity(enabled ? 0.12 : 0), radius: 14)
         }
         .buttonStyle(.plain)
         .disabled(!enabled || busy)
+    }
+}
+
+/// Тёмная кнопка внутри карточки (как «Сменить тариф»).
+struct PillButton: View {
+    let icon: String
+    let title: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: icon).font(.system(size: 15, weight: .semibold))
+                Text(title).font(ui(16, .semibold))
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity, minHeight: 48)
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.w1Pill))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.w1Border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct RoundIconButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.w1Surface))
+                .overlay(Circle().strokeBorder(Color.w1Border, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
@@ -171,14 +202,17 @@ struct SheetItem: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(mono(16, .semibold)).foregroundColor(.white)
-                Text(subtitle).font(mono(13)).foregroundColor(.w1Muted)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(ui(16, .semibold)).foregroundColor(.white)
+                    Text(subtitle).font(ui(14)).foregroundColor(.w1Muted).multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundColor(.w1Dim)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)))
+            .card(18)
         }
         .buttonStyle(.plain)
     }
@@ -190,8 +224,8 @@ struct StepHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(mono(26, .heavy)).foregroundColor(.white)
-            Text(subtitle).font(mono(14)).foregroundColor(.w1Muted)
+            Text(title).font(ui(28, .heavy)).foregroundColor(.white)
+            Text(subtitle).font(ui(15)).foregroundColor(.w1Muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)

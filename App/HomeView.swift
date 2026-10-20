@@ -1,7 +1,7 @@
 import NetworkExtension
 import SwiftUI
 
-/// Главный экран: логотип, статус, кнопка «АКТИВИРОВАТЬ», плашки внизу.
+/// Главный экран в стиле мини-приложения: шапка, карточка статуса, кнопка подключения, ссылки.
 struct HomeView: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var vpn: VPNController
@@ -11,6 +11,7 @@ struct HomeView: View {
 
     @State private var showMenu = false
     @State private var showSettings = false
+    @State private var showDiagnostics = false
     @State private var message: String?
     @State private var busy = false
 
@@ -19,45 +20,35 @@ struct HomeView: View {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     HStack {
-                        Button { showMenu = true } label: {
-                            Image(systemName: "line.3.horizontal")
-                                .font(.system(size: 24, weight: .medium))
-                                .frame(width: 44, height: 44)
-                        }
-                        .accessibilityLabel("Меню")
+                        RoundIconButton(icon: "line.3.horizontal", label: "Меню") { showMenu = true }
                         Spacer()
-                        Button { showSettings = true } label: {
-                            Image(systemName: "gearshape")
-                                .font(.system(size: 24, weight: .regular))
-                                .frame(width: 44, height: 44)
-                        }
-                        .accessibilityLabel("Настройки")
+                        RoundIconButton(icon: "gearshape", label: "Настройки") { showSettings = true }
                     }
-                    .foregroundColor(.white)
+
+                    BrandHeader()
+                        .padding(.top, 6)
+
+                    StatusCard(onChangeMode: { onRestart(.mode) })
+                        .padding(.top, 26)
+
+                    Spacer(minLength: 22)
+
+                    ConnectButton(status: vpn.status) { toggle() }
+
+                    if let message {
+                        Text(message)
+                            .font(ui(14))
+                            .foregroundColor(.w1Red)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 12)
+                            .padding(.horizontal, 6)
+                    }
 
                     Spacer(minLength: 24)
 
-                    Image("Logo")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: geo.size.width * 0.84)
-                    StatusLine()
-                        .padding(.top, 10)
-                    ConnectButton(status: vpn.status) { toggle() }
-                        .padding(.top, 26)
-                    if let message {
-                        Text(message)
-                            .font(mono(14))
-                            .foregroundColor(.w1Red)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 10)
-                    }
-
-                    Spacer(minLength: 28)
-
-                    VStack(spacing: 14) {
-                        GlowPill(icon: "paperplane", title: "Наш Telegram-канал", handle: "@windytoptop") { openURL(W1.channelURL) }
-                        GlowPill(icon: "bolt.fill", title: "LitEnergy VPN", handle: "@VPN_LitEnergy_bot") { openURL(W1.botURL) }
+                    VStack(spacing: 12) {
+                        LinkCard(icon: "paperplane.fill", title: "Наш Telegram-канал", subtitle: "@windytoptop") { openURL(W1.channelURL) }
+                        LinkCard(icon: "bolt.fill", title: "LitEnergy VPN", subtitle: "@VPN_LitEnergy_bot") { openURL(W1.botURL) }
                     }
                     .padding(.bottom, 8)
                 }
@@ -67,7 +58,7 @@ struct HomeView: View {
             }
         }
         .task {
-            // проверка доступа и свежий конфиг при открытии
+            // проверка доступа, срок и свежий конфиг при открытии
             guard state.mode == .vpn, state.activated else { return }
             do {
                 try await state.refresh()
@@ -80,6 +71,11 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showMenu) { menuSheet }
         .sheet(isPresented: $showSettings) { settingsSheet }
+        .alert("Диагностика VPN", isPresented: $showDiagnostics) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(VPNDiagnostics.current().report)
+        }
     }
 
     private func toggle() {
@@ -122,6 +118,10 @@ struct HomeView: View {
 
     private var menuSheet: some View {
         sheetBody(title: "Меню") {
+            SheetItem(title: "Купить или продлить ключ", subtitle: "Бот W1NDY CFG · @WindyCfg_bot") {
+                showMenu = false
+                openURL(W1.shopURL)
+            }
             SheetItem(title: "Наш Telegram-канал", subtitle: "Новости и обновления · @windytoptop") {
                 showMenu = false
                 openURL(W1.channelURL)
@@ -173,19 +173,23 @@ struct HomeView: View {
                     onRestart(.dns)
                 }
             }
+            SheetItem(title: "Диагностика VPN", subtitle: "Проверить подпись и VPN-модуль") {
+                showSettings = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { showDiagnostics = true }
+            }
         }
     }
 
     private func sheetBody<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                Capsule().fill(Color.white.opacity(0.25)).frame(width: 40, height: 5)
+            VStack(alignment: .leading, spacing: 10) {
+                Capsule().fill(Color.white.opacity(0.2)).frame(width: 40, height: 5)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
-                Text(title).font(mono(20, .bold)).foregroundColor(.white).padding(.vertical, 8)
+                Text(title).font(ui(22, .bold)).foregroundColor(.white).padding(.vertical, 6)
                 content()
                 Text("W1NDY CFG · версия \(W1.version)")
-                    .font(mono(13)).foregroundColor(.w1Dim)
+                    .font(ui(13)).foregroundColor(.w1Dim)
                     .padding(.top, 10)
             }
             .padding(.horizontal, 20)
@@ -197,42 +201,66 @@ struct HomeView: View {
     }
 }
 
-struct StatusLine: View {
+/// Карточка статуса, как «Подписка активна | 28 дн.» в мини-приложении.
+struct StatusCard: View {
     @EnvironmentObject private var state: AppState
     @EnvironmentObject private var vpn: VPNController
+    let onChangeMode: () -> Void
 
-    private var title: String {
-        switch vpn.status {
-        case .connected: return "РЕЖИМ ВКЛЮЧЕН"
-        case .connecting, .reasserting: return "ПОДКЛЮЧАЕМСЯ…"
-        case .disconnecting: return "ОТКЛЮЧАЕМСЯ…"
-        default: return "РЕЖИМ ВЫКЛЮЧЕН"
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: vpn.isConnected ? "checkmark" : (vpn.isBusy ? "ellipsis" : "power"))
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundColor(vpn.isConnected ? .black : .white)
+                    .frame(width: 42, height: 42)
+                    .background(Circle().fill(vpn.isConnected ? Color.white : Color.w1Pill))
+                    .overlay(Circle().strokeBorder(Color.w1BorderStrong, lineWidth: 1))
+                VStack(alignment: .leading, spacing: 3) {
+                    title
+                    Text(subtitle)
+                        .font(ui(14))
+                        .foregroundColor(.w1Muted)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 0)
+            }
+            PillButton(icon: "arrow.up.arrow.down", title: "Сменить режим", action: onChangeMode)
+        }
+        .padding(18)
+        .card(26)
+    }
+
+    @ViewBuilder
+    private var title: some View {
+        if vpn.isConnected, let since = vpn.connectedDate {
+            TimelineView(.periodic(from: Date(), by: 1)) { context in
+                let s = max(0, Int(context.date.timeIntervalSince(since)))
+                Text("Подключено | " + String(format: "%02d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60))
+                    .font(ui(18, .bold))
+                    .foregroundColor(.white)
+                    .monospacedDigit()
+            }
+        } else {
+            Text(headline)
+                .font(ui(18, .bold))
+                .foregroundColor(.white)
         }
     }
 
-    var body: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(vpn.isConnected ? Color.w1BlueLight : (vpn.isBusy ? Color.w1Muted : Color.w1Chrome))
-                    .frame(width: 9, height: 9)
-                Text(title)
-                    .font(mono(17))
-                    .tracking(1)
-                    .foregroundColor(vpn.isConnected ? .w1BlueLight : .white)
+    private var headline: String {
+        switch vpn.status {
+        case .connecting, .reasserting: return "Подключаемся…"
+        case .disconnecting: return "Отключаемся…"
+        default:
+            if state.mode == .vpn, let days = state.daysLeft {
+                return days > 0 ? "Ключ активен | \(days) дн." : "Срок ключа истёк"
             }
-            if vpn.isConnected, let since = vpn.connectedDate {
-                TimelineView(.periodic(from: Date(), by: 1)) { context in
-                    let s = max(0, Int(context.date.timeIntervalSince(since)))
-                    (Text("В сети: ").foregroundColor(.w1Muted)
-                        + Text(String(format: "%02d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)).foregroundColor(.w1BlueLight).bold())
-                        .font(mono(15))
-                }
-            } else {
-                (Text("Режим: ").foregroundColor(.w1Muted)
-                    + Text(state.mode == .dns ? "DNS \(state.dnsServer)" : "VPN").foregroundColor(.w1BlueLight).bold())
-                    .font(mono(15))
-            }
+            return state.mode == .dns ? "Режим DNS" : "VPN выключен"
         }
+    }
+
+    private var subtitle: String {
+        state.mode == .dns ? "DNS-сервер \(state.dnsServer)" : state.accessLine
     }
 }

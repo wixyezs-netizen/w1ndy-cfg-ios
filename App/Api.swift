@@ -5,6 +5,7 @@ enum W1 {
     static let base = "https://site.litenergyapp.store"
     static let botURL = URL(string: "https://t.me/VPN_LitEnergy_bot")!
     static let channelURL = URL(string: "https://t.me/windytoptop")!
+    static let shopURL = URL(string: "https://t.me/WindyCfg_bot")!
     static let releasesURL = URL(string: "https://github.com/wixyezs-netizen/w1ndy-cfg-ios/releases/latest")!
 
     static var version: String {

@@ -40,24 +40,18 @@ final class VPNController: ObservableObject {
 
     /// Bundle ID расширения ищем в самом приложении: после переподписи он может измениться.
     static var extensionBundleId: String {
-        if let plugins = Bundle.main.builtInPlugInsURL,
-           let items = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
-        {
-            for item in items where item.pathExtension == "appex" {
-                if let bundle = Bundle(url: item),
-                   let point = (bundle.infoDictionary?["NSExtension"] as? [String: Any])?["NSExtensionPointIdentifier"] as? String,
-                   point == "com.apple.networkextension.packet-tunnel",
-                   let id = bundle.bundleIdentifier
-                {
-                    return id
-                }
-            }
+        if let url = VPNDiagnostics.extensionURL(), let id = Bundle(url: url)?.bundleIdentifier {
+            return id
         }
         return (Bundle.main.bundleIdentifier ?? "com.w1ndy.cfg") + ".tunnel"
     }
 
     func connect(config: String) async {
         lastError = nil
+        if VPNDiagnostics.extensionURL() == nil {
+            lastError = VPNDiagnostics.current().problem
+            return
+        }
         do {
             let manager = self.manager ?? NETunnelProviderManager()
             let proto = (manager.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
@@ -74,17 +68,109 @@ final class VPNController: ObservableObject {
             try manager.connection.startVPNTunnel(options: ["configContent": config as NSString])
             update()
         } catch {
-            let ns = error as NSError
-            if ns.domain == NEVPNErrorDomain, ns.code == NEVPNError.configurationReadWriteFailed.rawValue {
-                lastError = "Разрешите добавление VPN-конфигурации"
-            } else {
-                lastError = error.localizedDescription
-            }
+            lastError = VPNDiagnostics.explain(error)
             update()
         }
     }
 
     func disconnect() {
         manager?.connection.stopVPNTunnel()
+    }
+}
+
+
+/// Проверка подписи: почему iOS не даёт добавить VPN.
+struct VPNDiagnostics {
+    enum Check {
+        case yes, no, unknown
+    }
+
+    let extensionFound: Bool
+    let appEntitlement: Check
+    let extensionEntitlement: Check
+    let teamName: String
+
+    static func current() -> VPNDiagnostics {
+        let appex = extensionURL()
+        let appProfile = profile(in: Bundle.main.bundleURL)
+        let extProfile = appex.flatMap { profile(in: $0) }
+        return VPNDiagnostics(
+            extensionFound: appex != nil,
+            appEntitlement: check(appProfile),
+            extensionEntitlement: appex == nil ? .no : check(extProfile),
+            teamName: (appProfile?["TeamName"] as? String) ?? ""
+        )
+    }
+
+    var problem: String? {
+        if !extensionFound {
+            return "В установленном приложении нет VPN-модуля. При подписи не удаляйте расширения (PlugIns/PacketTunnel.appex) — подписывайте IPA целиком."
+        }
+        if appEntitlement == .no || extensionEntitlement == .no {
+            return "Сертификат подписи не поддерживает VPN: в профиле нет разрешения Network Extensions (Packet Tunnel). Переподпишите приложение сертификатом с этим разрешением."
+        }
+        return nil
+    }
+
+    static func explain(_ error: Error) -> String {
+        let ns = error as NSError
+        let diag = current()
+        if let problem = diag.problem {
+            return problem
+        }
+        if ns.domain == NEVPNErrorDomain, ns.code == NEVPNError.configurationReadWriteFailed.rawValue {
+            return "iOS не разрешил добавить VPN (\(ns.localizedDescription)). Нажмите «Подключить» ещё раз и выберите «Разрешить». Если окно не появляется — сертификат подписи не поддерживает VPN (Network Extensions)."
+        }
+        return "\(ns.localizedDescription) (\(ns.domain) \(ns.code))"
+    }
+
+    static func extensionURL() -> URL? {
+        guard let plugins = Bundle.main.builtInPlugInsURL,
+              let items = try? FileManager.default.contentsOfDirectory(at: plugins, includingPropertiesForKeys: nil)
+        else { return nil }
+        for item in items where item.pathExtension == "appex" {
+            if let bundle = Bundle(url: item),
+               let point = (bundle.infoDictionary?["NSExtension"] as? [String: Any])?["NSExtensionPointIdentifier"] as? String,
+               point == "com.apple.networkextension.packet-tunnel"
+            {
+                return item
+            }
+        }
+        return nil
+    }
+
+    /// Содержимое embedded.mobileprovision (CMS-контейнер, внутри обычный plist).
+    static func profile(in bundleURL: URL) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: bundleURL.appendingPathComponent("embedded.mobileprovision")),
+              let start = data.range(of: Data("<?xml".utf8)),
+              let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound ..< data.endIndex)
+        else { return nil }
+        let plist = data.subdata(in: start.lowerBound ..< end.upperBound)
+        return (try? PropertyListSerialization.propertyList(from: plist, format: nil)) as? [String: Any]
+    }
+
+    static func check(_ profile: [String: Any]?) -> Check {
+        guard let profile else { return .unknown } // нет профиля: TrollStore/джейлбрейк — проверить нельзя
+        let ent = profile["Entitlements"] as? [String: Any] ?? [:]
+        let ne = ent["com.apple.developer.networking.networkextension"] as? [String] ?? []
+        return ne.contains("packet-tunnel-provider") ? .yes : .no
+    }
+
+    var report: String {
+        func s(_ c: Check) -> String {
+            switch c {
+            case .yes: return "есть"
+            case .no: return "нет"
+            case .unknown: return "не удалось проверить"
+            }
+        }
+        var lines = [
+            "VPN-модуль в приложении: \(extensionFound ? "есть" : "нет")",
+            "Разрешение VPN у приложения: \(s(appEntitlement))",
+            "Разрешение VPN у модуля: \(s(extensionEntitlement))",
+        ]
+        if !teamName.isEmpty { lines.append("Подпись: \(teamName)") }
+        lines.append(problem ?? "Подпись в порядке.")
+        return lines.joined(separator: "\n")
     }
 }

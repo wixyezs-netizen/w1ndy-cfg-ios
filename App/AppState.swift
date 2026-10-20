@@ -30,6 +30,9 @@ final class AppState: ObservableObject {
     @Published var tgName: String { didSet { defaults.set(tgName, forKey: "tg_name") } }
     @Published private(set) var token: String? { didSet { defaults.set(token, forKey: "token") } }
     @Published private(set) var vpnConfig: String? { didSet { defaults.set(vpnConfig, forKey: "vpn_config") } }
+    /// Окончание доступа (nil — бессрочно или ещё не известно) и название тарифа из магазина.
+    @Published private(set) var expiresAt: Date? { didSet { defaults.set(expiresAt?.timeIntervalSince1970, forKey: "expires_at") } }
+    @Published private(set) var plan: String { didSet { defaults.set(plan, forKey: "plan") } }
 
     var activated: Bool { !(token ?? "").isEmpty }
 
@@ -41,6 +44,9 @@ final class AppState: ObservableObject {
         tgName = defaults.string(forKey: "tg_name") ?? ""
         token = defaults.string(forKey: "token")
         vpnConfig = defaults.string(forKey: "vpn_config")
+        let exp = defaults.double(forKey: "expires_at")
+        expiresAt = exp > 0 ? Date(timeIntervalSince1970: exp) : nil
+        plan = defaults.string(forKey: "plan") ?? ""
     }
 
     var installId: String {
@@ -67,18 +73,46 @@ final class AppState: ObservableObject {
         self.token = token
         try await downloadProfile()
         mode = .vpn
+        try? await loadStatus()
     }
 
     /// Проверка доступа и обновление конфига (администратор мог что-то поменять).
     func refresh() async throws {
         guard let token, !token.isEmpty else { return }
         do {
-            _ = try await Api.json("GET", "/api/w1ndy/status?t=" + escape(token))
+            try await loadStatus()
         } catch let error as ApiError where error.code == 403 || error.code == 401 {
             reset()
             throw error
         }
         try await downloadProfile()
+    }
+
+    private func loadStatus() async throws {
+        guard let token, !token.isEmpty else { return }
+        let json = try await Api.json("GET", "/api/w1ndy/status?t=" + escape(token))
+        if let exp = (json["expires_at"] as? NSNumber)?.doubleValue, exp > 0 {
+            expiresAt = Date(timeIntervalSince1970: exp)
+        } else {
+            expiresAt = nil
+        }
+        plan = json["plan"] as? String ?? ""
+    }
+
+    /// Текст срока для карточки на главном экране.
+    var accessLine: String {
+        guard let expiresAt else { return plan.isEmpty ? "Бессрочный доступ" : "\(plan) · бессрочно" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ru_RU")
+        f.dateFormat = "d MMMM"
+        let until = "до " + f.string(from: expiresAt)
+        return plan.isEmpty ? "Доступ \(until)" : "\(plan) \(until)"
+    }
+
+    /// Сколько дней осталось (nil — бессрочно).
+    var daysLeft: Int? {
+        guard let expiresAt else { return nil }
+        return max(0, Int(ceil(expiresAt.timeIntervalSinceNow / 86400)))
     }
 
     private func downloadProfile() async throws {
@@ -113,6 +147,8 @@ final class AppState: ObservableObject {
     func reset() {
         token = nil
         vpnConfig = nil
+        expiresAt = nil
+        plan = ""
     }
 
     private func escape(_ s: String) -> String {
