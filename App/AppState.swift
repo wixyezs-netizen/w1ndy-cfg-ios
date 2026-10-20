@@ -5,7 +5,7 @@ enum Mode: String {
     case dns
 }
 
-struct DnsPreset: Identifiable {
+struct DnsPreset: Identifiable, Sendable {
     let title: String
     let address: String
     var id: String { address }
@@ -14,7 +14,7 @@ struct DnsPreset: Identifiable {
 /// Состояние приложения (аналог W1ndy.kt в Android-версии).
 @MainActor
 final class AppState: ObservableObject {
-    static let dnsPresets = [
+    nonisolated static let dnsPresets = [
         DnsPreset(title: "Google", address: "8.8.8.8"),
         DnsPreset(title: "Cloudflare", address: "1.1.1.1"),
         DnsPreset(title: "Яндекс", address: "77.88.8.8"),
@@ -126,7 +126,7 @@ final class AppState: ObservableObject {
         mode == .dns ? Self.dnsConfig(server: dnsServer) : vpnConfig
     }
 
-    static func normalizeDns(_ raw: String) -> String? {
+    nonisolated static func normalizeDns(_ raw: String) -> String? {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let parts = s.split(separator: ".", omittingEmptySubsequences: false)
         if parts.count == 4, parts.allSatisfy({ p in
@@ -142,7 +142,7 @@ final class AppState: ObservableObject {
     }
 
     /// В туннель попадает только адрес DNS (172.19.0.2), остальной трафик идёт напрямую.
-    static func dnsConfig(server: String) -> String {
+    nonisolated static func dnsConfig(server: String) -> String {
         let root: [String: Any] = [
             "log": ["level": "warn"],
             "dns": [
