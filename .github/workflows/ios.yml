@@ -123,3 +123,58 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* --title "W1NDY CFG iOS $VERSION" \
             --notes "Неподписанный IPA для iOS 15+. Подпишите своим сертификатом (нужна возможность Network Extensions). Основано на sing-box ${CORE_REF} (GPL-3.0)." || \
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+
+  screens:
+    name: Simulator screenshots
+    runs-on: macos-latest
+    timeout-minutes: 40
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build UI for simulator (without tunnel extension)
+        run: |
+          brew install xcodegen
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("project.yml"); t = p.read_text()
+          t = t.replace("      - target: PacketTunnel\n        embed: true\n", "")
+          i = t.index("  PacketTunnel:\n"); p.write_text(t[:i])
+          PY
+          xcodegen generate
+          xcodebuild -project W1NDY.xcodeproj -scheme W1NDY -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build > sim.log 2>&1 || { grep -E "error:" sim.log | head -40; exit 1; }
+
+      - name: Screenshots
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import json,sys
+          d=json.load(sys.stdin)['devices']
+          c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and 'Pro Max' not in x['name'] and 'Plus' not in x['name']]
+          c.sort(key=lambda x: x['name']); print(c[-1]['udid']); print(c[-1]['name'], file=sys.stderr)")
+          xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl ui "$UDID" appearance dark || true
+          xcrun simctl status_bar "$UDID" override --time "3:13" --batteryState charged --batteryLevel 100 || true
+          APP=build/Build/Products/Debug-iphonesimulator/W1NDY.app
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p shots
+          xcrun simctl launch "$UDID" com.w1ndy.cfg; sleep 10
+          xcrun simctl io "$UDID" screenshot shots/1-onboarding.png
+          xcrun simctl terminate "$UDID" com.w1ndy.cfg || true
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg onboarded -bool YES
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg mode dns
+          xcrun simctl spawn "$UDID" defaults write com.w1ndy.cfg dns 8.8.8.8
+          xcrun simctl launch "$UDID" com.w1ndy.cfg; sleep 10
+          xcrun simctl io "$UDID" screenshot shots/2-home.png
+          ls -la shots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-screens
+          path: |
+            shots
+            sim.log
+          retention-days: 7
