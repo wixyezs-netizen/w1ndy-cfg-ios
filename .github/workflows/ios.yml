@@ -1,0 +1,118 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CORE_REF: v1.14.3
+  GO_VERSION: 1.26.8
+
+jobs:
+  ipa:
+    name: Unsigned IPA
+    runs-on: macos-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain info
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Cache sing-box core (Libbox)
+        id: libbox
+        uses: actions/cache@v4
+        with:
+          path: Libbox.xcframework
+          key: libbox-ios-arm64-${{ env.CORE_REF }}-go${{ env.GO_VERSION }}-v1
+
+      - name: Build sing-box core for iOS
+        if: steps.libbox.outputs.cache-hit != 'true'
+        env:
+          GOTOOLCHAIN: local
+        run: |
+          git clone --depth 1 --branch "$CORE_REF" https://github.com/SagerNet/sing-box.git core
+          cd core
+          bash .github/patch_go_for_ios.sh || echo "go patch skipped"
+          make lib_install
+          export PATH="$PATH:$(go env GOPATH)/bin"
+          go run ./cmd/internal/build_libbox -target apple -platform ios/arm64
+          mv Libbox.xcframework ..
+          ls -la ../Libbox.xcframework
+
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen ldid
+          xcodegen generate
+
+      - name: Version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.0.0"; fi
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+
+      - name: Build app (no signing)
+        run: |
+          set +e
+          xcodebuild -project W1NDY.xcodeproj -scheme W1NDY -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build > build.log 2>&1
+          code=$?
+          grep -E "error:|\*\* BUILD" build.log | head -80
+          exit $code
+
+      - name: Package IPA
+        run: |
+          APP=build/Build/Products/Release-iphoneos/W1NDY.app
+          # вшиваем entitlements (Network Extension), чтобы их подхватил инструмент переподписи
+          ldid -SPacketTunnel/PacketTunnel.entitlements "$APP/PlugIns/PacketTunnel.appex/PacketTunnel"
+          ldid -SApp/W1NDY.entitlements "$APP/W1NDY"
+          ldid -e "$APP/PlugIns/PacketTunnel.appex/PacketTunnel"
+          mkdir -p dist/Payload
+          cp -R "$APP" dist/Payload/
+          cd dist
+          zip -qry "W1NDY-CFG-$VERSION-unsigned.ipa" Payload
+          rm -rf Payload
+          cp ../App/W1NDY.entitlements W1NDY.entitlements
+          cp ../PacketTunnel/PacketTunnel.entitlements PacketTunnel.entitlements
+          shasum -a 256 *.ipa > SHA256SUMS.txt
+          ls -la
+          du -sh "../$APP" "../$APP/PlugIns/PacketTunnel.appex"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: W1NDY-CFG-ipa
+          path: dist
+          retention-days: 30
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          retention-days: 7
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "W1NDY CFG iOS $VERSION" \
+            --notes "Неподписанный IPA для iOS 15+. Подпишите своим сертификатом (нужна возможность Network Extensions). Основано на sing-box ${CORE_REF} (GPL-3.0)." || \
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber

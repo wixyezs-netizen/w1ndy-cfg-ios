@@ -1,0 +1,6 @@
+build/
+dist/
+Libbox.xcframework/
+W1NDY.xcodeproj/
+core/
+*.ipa
