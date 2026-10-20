@@ -44,6 +44,10 @@ struct OnboardingView: View {
             .padding(.vertical, 12)
         }
         .onAppear {
+            if let notice = state.notice {
+                error = notice
+                state.notice = nil
+            }
             let saved = state.dnsServer
             if AppState.dnsPresets.contains(where: { $0.address == saved }) {
                 dnsChoice = saved

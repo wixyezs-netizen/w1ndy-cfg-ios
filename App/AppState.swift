@@ -23,6 +23,8 @@ final class AppState: ObservableObject {
 
     private let defaults = UserDefaults.standard
 
+    /// Сообщение для экрана ввода ключа (например, «срок ключа закончился»).
+    @Published var notice: String?
     @Published var onboarded: Bool { didSet { defaults.set(onboarded, forKey: "onboarded") } }
     @Published var mode: Mode { didSet { defaults.set(mode.rawValue, forKey: "mode") } }
     @Published var dnsServer: String { didSet { defaults.set(dnsServer, forKey: "dns") } }
@@ -83,6 +85,7 @@ final class AppState: ObservableObject {
             try await loadStatus()
         } catch let error as ApiError where error.code == 403 || error.code == 401 {
             reset()
+            if error.code == 403 { notice = error.message.isEmpty ? "Доступ отключён. Введите новый ключ." : error.message }
             throw error
         }
         try await downloadProfile()
